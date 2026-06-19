@@ -1,24 +1,21 @@
-import { useState, useMemo } from 'react';
+import { useState } from 'react';
 import { Target, AlertTriangle, CheckCircle2, TrendingUp, Calendar } from 'lucide-react';
 import { useBudgetStore } from '@/store/useBudgetStore';
-import { useTransactionStore } from '@/store/useTransactionStore';
 import { useSettingsStore } from '@/store/useSettingsStore';
-import { useCategoryStore } from '@/store/useCategoryStore';
+import { useMonthStats } from '@/hooks/useMonthStats';
 import { formatCurrency, getMonthKey } from '@/utils/format';
 
 function Budget() {
   const currency = useSettingsStore((s) => s.currency);
-  const categories = useCategoryStore((s) => s.categories);
 
   const [monthKey, setMonthKey] = useState(getMonthKey());
   const budgetLimit = useBudgetStore((s) => s.getBudgetLimit(monthKey));
   const setBudgetLimit = useBudgetStore((s) => s.setBudgetLimit);
 
-  const getTotalByMonth = useTransactionStore((s) => s.getTotalByMonth);
-  const getTotalByCategory = useTransactionStore((s) => s.getTotalByCategory);
+  const stats = useMonthStats(monthKey);
+  const spent = stats.expenseTotal;
 
   const [limitInput, setLimitInput] = useState(budgetLimit.toString());
-  const spent = getTotalByMonth(monthKey, 'expense');
 
   const isOverBudget = budgetLimit > 0 && spent > budgetLimit;
   const percent = budgetLimit > 0 ? Math.min((spent / budgetLimit) * 100, 100) : 0;
@@ -30,24 +27,6 @@ function Budget() {
       setBudgetLimit(monthKey, v);
     }
   };
-
-  const categoryBreakdown = useMemo(() => {
-    const totals = getTotalByCategory(monthKey, 'expense');
-    const items: Array<{ id: string; name: string; color: string; spent: number; percent: number }> = [];
-    categories.forEach((cat) => {
-      const s = totals.get(cat.id) || 0;
-      if (s > 0) {
-        items.push({
-          id: cat.id,
-          name: cat.name,
-          color: cat.color,
-          spent: s,
-          percent: budgetLimit > 0 ? (s / budgetLimit) * 100 : 0,
-        });
-      }
-    });
-    return items.sort((a, b) => b.spent - a.spent);
-  }, [monthKey, categories, getTotalByCategory, budgetLimit]);
 
   const today = new Date();
   const months: { key: string; label: string }[] = [];
@@ -67,6 +46,14 @@ function Budget() {
     monthKey === getMonthKey() ? today.getDate() : daysInMonth;
   const daysRemaining = daysInMonth - currentDay;
   const dailyAvgLeft = daysRemaining > 0 && remaining > 0 ? remaining / daysRemaining : 0;
+
+  const categoryBreakdown = stats.categoryExpenses.map((cat) => ({
+    id: cat.id,
+    name: cat.name,
+    color: cat.color,
+    spent: cat.value,
+    percent: budgetLimit > 0 ? (cat.value / budgetLimit) * 100 : 0,
+  }));
 
   return (
     <div className="space-y-6 animate-fade-in">

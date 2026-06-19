@@ -1,4 +1,3 @@
-import { useMemo } from 'react';
 import {
   BarChart,
   Bar,
@@ -11,73 +10,32 @@ import {
   Pie,
   Cell,
 } from 'recharts';
-import { Wallet, Receipt, PieChart as PieIcon, TrendingDown, TrendingUp, PiggyBank, Scale } from 'lucide-react';
+import { Receipt, PieChart as PieIcon, TrendingDown, TrendingUp, PiggyBank, Scale } from 'lucide-react';
 import StatCard from '@/components/StatCard';
-import { useTransactionStore } from '@/store/useTransactionStore';
-import { useCategoryStore } from '@/store/useCategoryStore';
 import { useSettingsStore } from '@/store/useSettingsStore';
+import { useMonthStats } from '@/hooks/useMonthStats';
 import {
   formatCurrency,
-  formatDateShort,
   getMonthKey,
   getPreviousMonthKey,
   calcChangePercent,
 } from '@/utils/format';
-import { DEFAULT_EXPENSE_CATEGORIES } from '@/types';
 
 function Dashboard() {
   const currency = useSettingsStore((s) => s.currency);
-  const categories = useCategoryStore((s) => s.categories);
-  const getTotalByMonth = useTransactionStore((s) => s.getTotalByMonth);
-  const getDailyTotals = useTransactionStore((s) => s.getDailyTotals);
-  const getTotalByCategory = useTransactionStore((s) => s.getTotalByCategory);
-  const getTransactionsByMonth = useTransactionStore((s) => s.getTransactionsByMonth);
-  const getBalanceByMonth = useTransactionStore((s) => s.getBalanceByMonth);
 
   const currentMonth = getMonthKey();
   const prevMonth = getPreviousMonthKey(currentMonth);
 
-  const currentExpense = getTotalByMonth(currentMonth, 'expense');
-  const prevExpense = getTotalByMonth(prevMonth, 'expense');
-  const expenseChange = calcChangePercent(currentExpense, prevExpense);
+  const cur = useMonthStats(currentMonth);
+  const prev = useMonthStats(prevMonth, false);
 
-  const currentIncome = getTotalByMonth(currentMonth, 'income');
-  const prevIncome = getTotalByMonth(prevMonth, 'income');
-  const incomeChange = calcChangePercent(currentIncome, prevIncome);
+  const expenseChange = calcChangePercent(cur.expenseTotal, prev.expenseTotal);
+  const incomeChange = calcChangePercent(cur.incomeTotal, prev.incomeTotal);
+  const balanceChange = cur.balance - prev.balance;
 
-  const currentBalance = getBalanceByMonth(currentMonth);
-  const prevBalance = getBalanceByMonth(prevMonth);
-  const balanceChange = currentBalance - prevBalance;
-
-  const txnCount = getTransactionsByMonth(currentMonth).length;
   const todayDate = new Date().getDate();
-  const avgPerDay = todayDate > 0 ? currentExpense / todayDate : 0;
-
-  const expenseCatIds = DEFAULT_EXPENSE_CATEGORIES.map((c) => c.id);
-  const expenseCategories = useMemo(
-    () => categories.filter((c) => expenseCatIds.includes(c.id)),
-    [categories, expenseCatIds],
-  );
-
-  const dailyData = useMemo(() => {
-    const raw = getDailyTotals(currentMonth, 'expense');
-    const todayDay = new Date().getDate();
-    return raw
-      .filter((d) => Number(d.date.slice(-2)) <= todayDay)
-      .map((d) => ({ ...d, label: formatDateShort(d.date) }));
-  }, [currentMonth, getDailyTotals]);
-
-  const categoryData = useMemo(() => {
-    const totals = getTotalByCategory(currentMonth, 'expense');
-    const result: Array<{ id: string; name: string; value: number; color: string }> = [];
-    expenseCategories.forEach((cat) => {
-      const v = totals.get(cat.id) || 0;
-      if (v > 0) result.push({ id: cat.id, name: cat.name, value: v, color: cat.color });
-    });
-    return result.sort((a, b) => b.value - a.value);
-  }, [currentMonth, expenseCategories, getTotalByCategory]);
-
-  const topCategory = categoryData[0];
+  const avgPerDay = todayDate > 0 ? cur.expenseTotal / todayDate : 0;
 
   return (
     <div className="space-y-6 animate-fade-in">
@@ -94,28 +52,28 @@ function Dashboard() {
       <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
         <StatCard
           title="本月支出"
-          value={formatCurrency(currentExpense, currency)}
+          value={formatCurrency(cur.expenseTotal, currency)}
           change={expenseChange}
           icon={<TrendingDown className="w-5 h-5" />}
           highlight
         />
         <StatCard
           title="本月收入"
-          value={formatCurrency(currentIncome, currency)}
+          value={formatCurrency(cur.incomeTotal, currency)}
           change={incomeChange}
           icon={<TrendingUp className="w-5 h-5" />}
           variant="income"
         />
         <StatCard
           title="本月结余"
-          value={formatCurrency(currentBalance, currency)}
+          value={formatCurrency(cur.balance, currency)}
           change={balanceChange}
           icon={<Scale className="w-5 h-5" />}
           variant="balance"
         />
         <StatCard
           title="交易笔数"
-          value={txnCount.toString()}
+          value={cur.txnCount.toString()}
           icon={<Receipt className="w-5 h-5" />}
         />
         <StatCard
@@ -125,7 +83,7 @@ function Dashboard() {
         />
         <StatCard
           title="最多支出分类"
-          value={topCategory?.name || '--'}
+          value={cur.topExpenseCategory?.name || '--'}
           icon={<PieIcon className="w-5 h-5" />}
         />
       </div>
@@ -140,7 +98,7 @@ function Dashboard() {
           </div>
           <div className="h-72">
             <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={dailyData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+              <BarChart data={cur.dailyExpenses} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
                 <defs>
                   <linearGradient id="barGradient" x1="0" y1="0" x2="0" y2="1">
                     <stop offset="0%" stopColor="#6366f1" stopOpacity={0.9} />
@@ -157,7 +115,7 @@ function Dashboard() {
                   axisLine={false}
                   tickLine={false}
                   tick={{ fill: '#64748b', fontSize: 11 }}
-                  interval={Math.floor(dailyData.length / 10)}
+                  interval={Math.floor(cur.dailyExpenses.length / 10)}
                 />
                 <YAxis
                   axisLine={false}
@@ -195,13 +153,13 @@ function Dashboard() {
             <p className="text-xs text-slate-500 mt-0.5">本月各分类支出占比</p>
           </div>
 
-          {categoryData.length > 0 ? (
+          {cur.categoryExpenses.length > 0 ? (
             <>
               <div className="h-56">
                 <ResponsiveContainer width="100%" height="100%">
                   <PieChart>
                     <Pie
-                      data={categoryData}
+                      data={cur.categoryExpenses}
                       cx="50%"
                       cy="50%"
                       innerRadius={55}
@@ -210,7 +168,7 @@ function Dashboard() {
                       dataKey="value"
                       strokeWidth={0}
                     >
-                      {categoryData.map((entry, index) => (
+                      {cur.categoryExpenses.map((entry, index) => (
                         <Cell
                           key={`cell-${index}`}
                           fill={entry.color}
@@ -237,8 +195,8 @@ function Dashboard() {
               </div>
 
               <div className="mt-4 space-y-2 max-h-40 overflow-y-auto pr-1">
-                {categoryData.map((cat) => {
-                  const pct = (cat.value / currentExpense) * 100;
+                {cur.categoryExpenses.map((cat) => {
+                  const pct = cur.expenseTotal > 0 ? (cat.value / cur.expenseTotal) * 100 : 0;
                   return (
                     <div key={cat.id} className="flex items-center justify-between text-sm">
                       <div className="flex items-center gap-2 min-w-0">
