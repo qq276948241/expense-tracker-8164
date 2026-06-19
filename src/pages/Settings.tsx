@@ -139,7 +139,7 @@ function Settings() {
         </div>
 
         <p className="text-xs text-slate-500 mt-3 leading-relaxed">
-          导出字段包括：日期、分类、金额、备注。数据按日期倒序排列，文件编码为 UTF-8 BOM，
+          导出字段包括：日期、类型、分类、金额、备注。数据按日期倒序排列，文件编码为 UTF-8 BOM，
           可在 Excel 中直接打开正常显示中文。
         </p>
       </div>

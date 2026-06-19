@@ -23,19 +23,22 @@ function StatCard({
   highlight,
   variant = 'default',
 }: StatCardProps) {
-  const isChangePositive = change !== undefined && change >= 0;
+  const hasValidChange = change !== undefined && !Number.isNaN(change);
+  const isChangePositive = hasValidChange && (change as number) >= 0;
 
   let changeColorClass = '';
   if (variant === 'income') {
-    changeColorClass = isChangePositive
+    changeColorClass = !hasValidChange || isChangePositive
       ? 'bg-emerald-500/15 text-emerald-400 border-emerald-500/20'
       : 'bg-rose-500/15 text-rose-400 border-rose-500/20';
   } else if (variant === 'balance') {
-    changeColorClass = isChangePositive
+    changeColorClass = !hasValidChange || isChangePositive
       ? 'bg-emerald-500/15 text-emerald-400 border-emerald-500/20'
       : 'bg-rose-500/15 text-rose-400 border-rose-500/20';
   } else {
-    changeColorClass = isChangePositive
+    changeColorClass = !hasValidChange
+      ? 'bg-slate-500/15 text-slate-400 border-slate-500/20'
+      : isChangePositive
       ? 'bg-rose-500/15 text-rose-400 border-rose-500/20'
       : 'bg-emerald-500/15 text-emerald-400 border-emerald-500/20';
   }
@@ -110,17 +113,21 @@ function StatCard({
               changeColorClass,
             )}
           >
-            {isChangePositive ? (
-              <ArrowUp className="w-3.5 h-3.5" />
-            ) : (
-              <ArrowDown className="w-3.5 h-3.5" />
-            )}
+            {hasValidChange ? (
+              isChangePositive ? (
+                <ArrowUp className="w-3.5 h-3.5" />
+              ) : (
+                <ArrowDown className="w-3.5 h-3.5" />
+              )
+            ) : null}
             <span>
-              {isChangePositive ? '+' : ''}
-              {variant === 'balance' ? Math.abs(change).toFixed(0) : change.toFixed(1)}
-              {variant === 'balance' ? '' : '%'}
+              {hasValidChange
+                ? `${isChangePositive ? '+' : ''}${variant === 'balance' ? Math.abs(change as number).toFixed(0) : (change as number).toFixed(1)}${variant === 'balance' ? '' : '%'}`
+                : '新数据'}
             </span>
-            <span className="text-slate-500 font-normal ml-0.5">环比</span>
+            {hasValidChange && (
+              <span className="text-slate-500 font-normal ml-0.5">环比</span>
+            )}
           </div>
         )}
       </div>

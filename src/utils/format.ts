@@ -2,11 +2,12 @@ import { Currency, CURRENCY_SYMBOLS } from '@/types';
 
 export function formatCurrency(amount: number, currency: Currency = 'CNY'): string {
   const symbol = CURRENCY_SYMBOLS[currency];
+  const sign = amount < 0 ? '-' : '';
   const formatted = new Intl.NumberFormat('zh-CN', {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
   }).format(Math.abs(amount));
-  return `${symbol}${formatted}`;
+  return `${sign}${symbol}${formatted}`;
 }
 
 export function formatDate(dateStr: string): string {
@@ -50,7 +51,7 @@ export function getPreviousMonthKey(monthKey: string): string {
 }
 
 export function calcChangePercent(current: number, previous: number): number {
-  if (previous === 0) return current === 0 ? 0 : 100;
+  if (previous === 0) return NaN;
   return ((current - previous) / previous) * 100;
 }
 
