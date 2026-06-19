@@ -1,24 +1,30 @@
 import { useMemo, useState } from 'react';
-import { Plus, Filter, X, Edit3, Trash2 } from 'lucide-react';
+import { Plus, Filter, X, Edit3, Trash2, TrendingDown, TrendingUp } from 'lucide-react';
 import Modal from '@/components/Modal';
 import CategoryBadge from '@/components/CategoryBadge';
 import EmptyState from '@/components/EmptyState';
 import { useTransactionStore } from '@/store/useTransactionStore';
 import { useCategoryStore } from '@/store/useCategoryStore';
 import { useSettingsStore } from '@/store/useSettingsStore';
-import { Transaction } from '@/types';
+import { Transaction, TransactionType, DEFAULT_EXPENSE_CATEGORIES, DEFAULT_INCOME_CATEGORIES } from '@/types';
 import { formatCurrency, formatDate } from '@/utils/format';
 
+type FilterType = 'all' | 'expense' | 'income';
+
 interface FormState {
+  type: TransactionType;
   amount: string;
   categoryId: string;
   date: string;
   note: string;
 }
 
-function emptyForm(): FormState {
+function emptyForm(type: TransactionType = 'expense'): FormState {
   const today = new Date().toISOString().slice(0, 10);
-  return { amount: '', categoryId: '', date: today, note: '' };
+  const defaultCat = type === 'expense'
+    ? DEFAULT_EXPENSE_CATEGORIES[0]?.id || ''
+    : DEFAULT_INCOME_CATEGORIES[0]?.id || '';
+  return { type, amount: '', categoryId: defaultCat, date: today, note: '' };
 }
 
 function Transactions() {
@@ -30,6 +36,7 @@ function Transactions() {
   const updateTransaction = useTransactionStore((s) => s.updateTransaction);
   const deleteTransaction = useTransactionStore((s) => s.deleteTransaction);
 
+  const [filterType, setFilterType] = useState<FilterType>('all');
   const [selectedCategoryIds, setSelectedCategoryIds] = useState<string[]>([]);
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
@@ -38,16 +45,43 @@ function Transactions() {
   const [editing, setEditing] = useState<Transaction | null>(null);
   const [form, setForm] = useState<FormState>(emptyForm());
 
+  const incomeCatIds = DEFAULT_INCOME_CATEGORIES.map((c) => c.id);
+
+  const incomeCategories = useMemo(
+    () => categories.filter((c) => incomeCatIds.includes(c.id)),
+    [categories, incomeCatIds],
+  );
+
+  const expenseCategories = useMemo(
+    () => categories.filter((c) => !incomeCatIds.includes(c.id)),
+    [categories, incomeCatIds],
+  );
+
+  const filteredCategories = useMemo(() => {
+    if (filterType === 'expense') return expenseCategories;
+    if (filterType === 'income') return incomeCategories;
+    return categories;
+  }, [filterType, categories, expenseCategories, incomeCategories]);
+
   const filtered = useMemo(() => {
     return transactions.filter((t) => {
-      if (selectedCategoryIds.length > 0 && !selectedCategoryIds.includes(t.categoryId)) {
-        return false;
-      }
+      if (filterType !== 'all' && t.type !== filterType) return false;
+      if (selectedCategoryIds.length > 0 && !selectedCategoryIds.includes(t.categoryId)) return false;
       if (startDate && t.date < startDate) return false;
       if (endDate && t.date > endDate) return false;
       return true;
     });
-  }, [transactions, selectedCategoryIds, startDate, endDate]);
+  }, [transactions, filterType, selectedCategoryIds, startDate, endDate]);
+
+  const totals = useMemo(() => {
+    let expense = 0;
+    let income = 0;
+    filtered.forEach((t) => {
+      if (t.type === 'expense') expense += t.amount;
+      else income += t.amount;
+    });
+    return { expense, income, balance: income - expense };
+  }, [filtered]);
 
   const toggleCategory = (id: string) => {
     setSelectedCategoryIds((prev) =>
@@ -56,6 +90,7 @@ function Transactions() {
   };
 
   const resetFilters = () => {
+    setFilterType('all');
     setSelectedCategoryIds([]);
     setStartDate('');
     setEndDate('');
@@ -63,13 +98,15 @@ function Transactions() {
 
   const openAdd = () => {
     setEditing(null);
-    setForm({ ...emptyForm(), categoryId: categories[0]?.id || '' });
+    const type = filterType === 'income' ? 'income' : 'expense';
+    setForm(emptyForm(type));
     setModalOpen(true);
   };
 
   const openEdit = (txn: Transaction) => {
     setEditing(txn);
     setForm({
+      type: txn.type,
       amount: txn.amount.toString(),
       categoryId: txn.categoryId,
       date: txn.date,
@@ -78,12 +115,20 @@ function Transactions() {
     setModalOpen(true);
   };
 
+  const switchFormType = (type: TransactionType) => {
+    const defaultCat = type === 'expense'
+      ? DEFAULT_EXPENSE_CATEGORIES[0]?.id || ''
+      : DEFAULT_INCOME_CATEGORIES[0]?.id || '';
+    setForm({ ...form, type, categoryId: defaultCat });
+  };
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     const amount = Number(form.amount);
     if (!amount || amount <= 0 || !form.categoryId || !form.date) return;
 
     const data = {
+      type: form.type,
       amount,
       categoryId: form.categoryId,
       date: form.date,
@@ -98,19 +143,45 @@ function Transactions() {
     setModalOpen(false);
   };
 
+  const FilterTab = ({ value, label, icon: Icon }: { value: FilterType; label: string; icon: any }) => {
+    const active = filterType === value;
+    return (
+      <button
+        onClick={() => setFilterType(value)}
+        className={`inline-flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-medium transition-all ${
+          active
+            ? 'bg-white/10 text-white'
+            : 'text-slate-400 hover:text-slate-300 hover:bg-white/5'
+        }`}
+      >
+        <Icon className="w-4 h-4" />
+        {label}
+      </button>
+    );
+  };
+
   return (
     <div className="space-y-6 animate-fade-in">
       <div className="flex items-end justify-between">
         <div>
           <h1 className="text-2xl font-bold text-white mb-1">流水</h1>
           <p className="text-sm text-slate-400">
-            共 {filtered.length} 条记录，合计{' '}
-            <span className="font-mono font-semibold text-slate-200">
-              {formatCurrency(
-                filtered.reduce((s, t) => s + t.amount, 0),
-                currency,
-              )}
+            共 {filtered.length} 条记录，支出{' '}
+            <span className="font-mono font-semibold text-rose-400">
+              -{formatCurrency(totals.expense, currency)}
             </span>
+            ，收入{' '}
+            <span className="font-mono font-semibold text-emerald-400">
+              +{formatCurrency(totals.income, currency)}
+            </span>
+            {filterType === 'all' && (
+              <>
+                {' '}结余{' '}
+                <span className={`font-mono font-semibold ${totals.balance >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
+                  {totals.balance >= 0 ? '+' : ''}{formatCurrency(totals.balance, currency)}
+                </span>
+              </>
+            )}
           </p>
         </div>
         <button onClick={openAdd} className="btn-primary inline-flex items-center gap-2">
@@ -123,7 +194,7 @@ function Transactions() {
         <div className="flex items-center gap-2 text-sm font-medium text-slate-300">
           <Filter className="w-4 h-4 text-slate-500" />
           筛选条件
-          {(selectedCategoryIds.length > 0 || startDate || endDate) && (
+          {(filterType !== 'all' || selectedCategoryIds.length > 0 || startDate || endDate) && (
             <button
               onClick={resetFilters}
               className="ml-auto text-xs text-primary-400 hover:text-primary-300 inline-flex items-center gap-1"
@@ -134,8 +205,14 @@ function Transactions() {
           )}
         </div>
 
+        <div className="flex items-center gap-1 bg-slate-900/50 rounded-lg p-1 w-fit">
+          <FilterTab value="all" label="全部" icon={Filter} />
+          <FilterTab value="expense" label="支出" icon={TrendingDown} />
+          <FilterTab value="income" label="收入" icon={TrendingUp} />
+        </div>
+
         <div className="flex flex-wrap gap-2">
-          {categories.map((cat) => {
+          {filteredCategories.map((cat) => {
             const active = selectedCategoryIds.includes(cat.id);
             return (
               <button
@@ -184,7 +261,7 @@ function Transactions() {
         {filtered.length === 0 ? (
           <EmptyState
             title="没有匹配的记录"
-            description="试试调整筛选条件，或者添加一条新的支出记录"
+            description="试试调整筛选条件，或者添加一条新记录"
             action={
               <button onClick={openAdd} className="btn-primary">
                 添加记录
@@ -192,9 +269,10 @@ function Transactions() {
             }
           />
         ) : (
-          <div className="divide-y divide-white/5 max-h-[calc(100vh-420px)] overflow-y-auto">
+          <div className="divide-y divide-white/5 max-h-[calc(100vh-460px)] overflow-y-auto">
             {filtered.map((txn) => {
               const cat = getCategoryById(txn.categoryId);
+              const isIncome = txn.type === 'income';
               return (
                 <div
                   key={txn.id}
@@ -212,14 +290,21 @@ function Transactions() {
                           {cat.name}
                         </span>
                       )}
+                      <span className={`text-xs shrink-0 px-2 py-0.5 rounded-full font-medium ${
+                        isIncome ? 'bg-emerald-500/15 text-emerald-400' : 'bg-rose-500/15 text-rose-400'
+                      }`}>
+                        {isIncome ? '收入' : '支出'}
+                      </span>
                     </div>
                     <p className="text-xs text-slate-500 mt-0.5">
                       {formatDate(txn.date)}
                     </p>
                   </div>
                   <div className="text-right shrink-0 mr-2">
-                    <p className="font-mono text-lg font-semibold text-white">
-                      -{formatCurrency(txn.amount, currency)}
+                    <p className={`font-mono text-lg font-semibold ${
+                      isIncome ? 'text-emerald-400' : 'text-rose-400'
+                    }`}>
+                      {isIncome ? '+' : '-'}{formatCurrency(txn.amount, currency)}
                     </p>
                   </div>
                   <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
@@ -257,6 +342,38 @@ function Transactions() {
         <form onSubmit={handleSubmit} className="space-y-5">
           <div>
             <label className="block text-xs font-medium text-slate-400 mb-2">
+              类型
+            </label>
+            <div className="flex items-center gap-2 bg-slate-900/50 rounded-lg p-1">
+              <button
+                type="button"
+                onClick={() => switchFormType('expense')}
+                className={`flex-1 py-2 rounded-md text-sm font-medium transition-all flex items-center justify-center gap-2 ${
+                  form.type === 'expense'
+                    ? 'bg-rose-500/20 text-rose-400'
+                    : 'text-slate-400 hover:text-slate-300'
+                }`}
+              >
+                <TrendingDown className="w-4 h-4" />
+                支出
+              </button>
+              <button
+                type="button"
+                onClick={() => switchFormType('income')}
+                className={`flex-1 py-2 rounded-md text-sm font-medium transition-all flex items-center justify-center gap-2 ${
+                  form.type === 'income'
+                    ? 'bg-emerald-500/20 text-emerald-400'
+                    : 'text-slate-400 hover:text-slate-300'
+                }`}
+              >
+                <TrendingUp className="w-4 h-4" />
+                收入
+              </button>
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-xs font-medium text-slate-400 mb-2">
               金额
             </label>
             <div className="relative">
@@ -287,7 +404,7 @@ function Transactions() {
               className="input-base appearance-none pr-10"
             >
               <option value="">请选择分类</option>
-              {categories.map((cat) => (
+              {(form.type === 'expense' ? expenseCategories : incomeCategories).map((cat) => (
                 <option key={cat.id} value={cat.id}>
                   {cat.name}
                 </option>

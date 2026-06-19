@@ -7,12 +7,13 @@ export function exportTransactionsToCSV(
 ): void {
   const categoryMap = new Map(categories.map((c) => [c.id, c.name]));
 
-  const headers = ['日期', '分类', '金额', '备注'];
+  const headers = ['日期', '类型', '分类', '金额', '备注'];
   const rows = transactions
     .slice()
     .sort((a, b) => b.date.localeCompare(a.date))
     .map((t) => [
       formatDate(t.date),
+      t.type === 'income' ? '收入' : '支出',
       categoryMap.get(t.categoryId) || '未知',
       t.amount.toFixed(2),
       t.note.replace(/"/g, '""'),

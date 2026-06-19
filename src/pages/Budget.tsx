@@ -18,7 +18,7 @@ function Budget() {
   const getTotalByCategory = useTransactionStore((s) => s.getTotalByCategory);
 
   const [limitInput, setLimitInput] = useState(budgetLimit.toString());
-  const spent = getTotalByMonth(monthKey);
+  const spent = getTotalByMonth(monthKey, 'expense');
 
   const isOverBudget = budgetLimit > 0 && spent > budgetLimit;
   const percent = budgetLimit > 0 ? Math.min((spent / budgetLimit) * 100, 100) : 0;
@@ -32,7 +32,7 @@ function Budget() {
   };
 
   const categoryBreakdown = useMemo(() => {
-    const totals = getTotalByCategory(monthKey);
+    const totals = getTotalByCategory(monthKey, 'expense');
     const items: Array<{ id: string; name: string; color: string; spent: number; percent: number }> = [];
     categories.forEach((cat) => {
       const s = totals.get(cat.id) || 0;
